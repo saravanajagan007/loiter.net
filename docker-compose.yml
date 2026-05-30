@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  loiter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: loiter-app
+    restart: always
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=mysql://loiter:password@loiter-mysql:3306/loiterdb
+      - REDIS_URL=redis://loiter-redis:6379
+      - AUTH_SECRET=8e6b9c944d188094f9958784d12c5b74
+      - AUTH_TRUST_HOST=true
+      - NEXTAUTH_URL=https://loiter.net
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - srv_default
+
+  mysql:
+    image: mysql:8.0
+    container_name: loiter-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: loiterdb
+      MYSQL_USER: loiter
+      MYSQL_PASSWORD: password
+    ports:
+      - "3307:3306"
+    volumes:
+      - loiter_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - srv_default
+
+  redis:
+    image: redis:7-alpine
+    container_name: loiter-redis
+    restart: always
+    ports:
+      - "6380:6379"
+    volumes:
+      - loiter_redis_data:/data
+    networks:
+      - srv_default
+
+networks:
+  srv_default:
+    external: true
+
+volumes:
+  loiter_mysql_data:
+  loiter_redis_data:

@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loiter-workers
+  namespace: default
+  labels:
+    app: loiter
+    tier: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: loiter
+      tier: worker
+  template:
+    metadata:
+      labels:
+        app: loiter
+        tier: worker
+    spec:
+      containers:
+        - name: loiter-worker
+          image: ghcr.io/loiter/loiter-app:latest
+          command: ["node", "dist/services/queue/workers/index.js"]
+          envFrom:
+            - configMapRef:
+                name: loiter-config
+            - secretRef:
+                name: loiter-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"

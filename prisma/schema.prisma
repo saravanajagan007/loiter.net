@@ -1,0 +1,293 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id            String          @id @default(cuid())
+  name          String?
+  email         String?         @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          Role            @default(USER)
+  accounts      Account[]
+  sessions      Session[]
+  memberships   OrgMembership[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  notifications Notification[]
+  auditLogs     AuditLog[]
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Organization {
+  id               String          @id @default(cuid())
+  name             String
+  slug             String          @unique
+  stripeCustomerId String?         @unique
+  planTier         PlanTier        @default(FREE)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  members          OrgMembership[]
+  workspaces       Workspace[]
+  subscription     Subscription?
+  apiKeys          ApiKey[]
+  auditLogs        AuditLog[]
+}
+
+enum PlanTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+model OrgMembership {
+  id           String       @id @default(cuid())
+  orgId        String
+  userId       String
+  role         OrgRole      @default(MEMBER)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Workspace {
+  id             String          @id @default(cuid())
+  orgId          String
+  name           String
+  slug           String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  socialAccounts SocialAccount[]
+  contentSources ContentSource[]
+  collectedPosts CollectedPost[]
+  generatedPosts GeneratedPost[]
+  queuedPosts    QueuedPost[]
+  publishedPosts PublishedPost[]
+  notifications  Notification[]
+
+  @@unique([orgId, slug])
+}
+
+model SocialAccount {
+  id           String       @id @default(cuid())
+  workspaceId  String
+  platform     PlatformType
+  platformId   String // ID on the social platform
+  handle       String?
+  accessToken  String       @db.Text
+  refreshToken String?      @db.Text
+  expiresAt    DateTime?
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, platform, platformId])
+}
+
+enum PlatformType {
+  X
+  LINKEDIN
+  INSTAGRAM
+  THREADS
+  FACEBOOK
+  TIKTOK
+  REDDIT
+  BLUESKY
+  YOUTUBE
+}
+
+model ContentSource {
+  id           String     @id @default(cuid())
+  workspaceId  String
+  type         SourceType
+  value        String // e.g., "@handle", "#hashtag", "keyword", "RSS URL"
+  isActive     Boolean    @default(true)
+  lastPolledAt DateTime?
+  createdAt    DateTime   @default(now())
+  workspace    Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+enum SourceType {
+  HANDLE
+  HASHTAG
+  KEYWORD
+  RSS
+  URL
+}
+
+model CollectedPost {
+  id             String          @id @default(cuid())
+  workspaceId    String
+  externalId     String // ID from source platform
+  sourceType     PlatformType
+  authorName     String?
+  authorHandle   String?
+  content        String          @db.Text
+  mediaUrls      Json? // Array of media URLs
+  engagement     Json? // Metrics like likes, retweets
+  postedAt       DateTime
+  createdAt      DateTime        @default(now())
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  generatedPosts GeneratedPost[]
+
+  @@unique([workspaceId, externalId, sourceType])
+}
+
+model GeneratedPost {
+  id               String         @id @default(cuid())
+  workspaceId      String
+  collectedPostId  String?
+  originalContent  String?        @db.Text
+  generatedContent String         @db.Text
+  tone             String?
+  status           PostStatus     @default(DRAFT)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  workspace        Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  collectedPost    CollectedPost? @relation(fields: [collectedPostId], references: [id])
+  queuedPost       QueuedPost?
+}
+
+enum PostStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+model QueuedPost {
+  id              String         @id @default(cuid())
+  workspaceId     String
+  generatedPostId String         @unique
+  platform        PlatformType
+  scheduledFor    DateTime
+  status          QueueStatus    @default(PENDING)
+  attempts        Int            @default(0)
+  errorMessage    String?        @db.Text
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  generatedPost   GeneratedPost  @relation(fields: [generatedPostId], references: [id], onDelete: Cascade)
+  publishedPost   PublishedPost?
+}
+
+enum QueueStatus {
+  PENDING
+  PROCESSING
+  FAILED
+  PUBLISHED
+}
+
+model PublishedPost {
+  id           String       @id @default(cuid())
+  workspaceId  String
+  queuedPostId String       @unique
+  platform     PlatformType
+  externalId   String       @unique // ID returned by the platform
+  publishedAt  DateTime     @default(now())
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  queuedPost   QueuedPost   @relation(fields: [queuedPostId], references: [id], onDelete: Cascade)
+}
+
+// --- Enterprise & Scalability Additions ---
+
+model Subscription {
+  id                   String       @id @default(cuid())
+  organizationId       String       @unique
+  stripeSubscriptionId String?      @unique
+  stripePriceId        String?
+  status               String       @default("active")
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean      @default(false)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model ApiKey {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  keyHash        String       @unique
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String?
+  type        String // e.g., "APPROVAL_NEEDED", "POST_FAILED"
+  title       String
+  message     String   @db.Text
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, userId])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  action         String
+  entityType     String
+  entityId       String
+  details        Json?
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, entityType])
+}
