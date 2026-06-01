@@ -1,10 +1,8 @@
 import { Worker, Job } from "bullmq";
 import { QUEUES, workerOptions } from "../config";
 import db from "@/lib/db";
-import { OpenAIProvider } from "../../ai/openai-provider";
+import { getAIProvider } from "../../ai";
 import { PostStatus } from "@prisma/client";
-
-const aiProvider = new OpenAIProvider();
 
 export const aiProcessorWorker = new Worker(
   QUEUES.AI_PROCESSOR,
@@ -17,6 +15,7 @@ export const aiProcessorWorker = new Worker(
 
     if (!collectedPost) return;
 
+    const aiProvider = await getAIProvider();
     const aiResult = await aiProvider.generatePost(collectedPost.content, { tone });
 
     await db.generatedPost.create({

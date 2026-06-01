@@ -21,6 +21,8 @@ const items = [
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
+import { SidebarFooterUser } from "./sidebar-footer-user";
+
 export function AppSidebar({ user }: { user: Session["user"] }) {
   return (
     <Sidebar>
@@ -45,15 +47,7 @@ export function AppSidebar({ user }: { user: Session["user"] }) {
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter className="p-4 border-t">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium">
-            {user.name?.[0] || user.email?.[0].toUpperCase()}
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">{user.name || "User"}</span>
-            <span className="text-xs text-muted-foreground truncate w-32">{user.email}</span>
-          </div>
-        </div>
+        <SidebarFooterUser user={user} />
       </SidebarFooter>
     </Sidebar>
   );

@@ -1,13 +1,11 @@
 import OpenAI from "openai";
+import { getSystemSetting } from "@/lib/settings";
 import { AIProvider, AIResponse } from "./types";
 
 export class OpenAIProvider implements AIProvider {
-  private client: OpenAI;
-
-  constructor() {
-    this.client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+  private async getClient(): Promise<OpenAI> {
+    const apiKey = await getSystemSetting("OPENAI_API_KEY");
+    return new OpenAI({ apiKey });
   }
 
   async generatePost(
@@ -22,7 +20,8 @@ export class OpenAIProvider implements AIProvider {
     const tone = options.tone || "professional";
     const maxLength = options.maxLength || 280;
 
-    const response = await this.client.chat.completions.create({
+    const client = await this.getClient();
+    const response = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
@@ -62,7 +61,8 @@ export class OpenAIProvider implements AIProvider {
     const tone = options.tone || "informative";
     const itemCount = options.itemCount || 3;
 
-    const response = await this.client.chat.completions.create({
+    const client = await this.getClient();
+    const response = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {

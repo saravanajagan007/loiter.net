@@ -1,7 +1,43 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 
 const prismaClientSingleton = () => {
-  return new PrismaClient();
+  const connectionString = process.env.DATABASE_URL || "mysql://root:rootpassword@127.0.0.1:3307/loiterdb";
+  
+  try {
+    const parsed = new URL(connectionString);
+    const host = parsed.hostname;
+    const port = parsed.port ? parseInt(parsed.port, 10) : 3306;
+    const user = decodeURIComponent(parsed.username);
+    const password = decodeURIComponent(parsed.password);
+    const database = parsed.pathname.substring(1); // remove leading '/'
+    
+    const queryOptions: Record<string, any> = {};
+    parsed.searchParams.forEach((val, key) => {
+      if (val === "true") queryOptions[key] = true;
+      else if (val === "false") queryOptions[key] = false;
+      else if (!isNaN(Number(val))) queryOptions[key] = Number(val);
+      else queryOptions[key] = val;
+    });
+
+    const poolConfig = {
+      host,
+      port,
+      user,
+      password,
+      database,
+      connectTimeout: 10000, // 10s connection timeout (default is 1s in Prisma adapter)
+      acquireTimeout: 20000, // 20s acquire timeout (default is 10s)
+      ...queryOptions
+    };
+
+    const adapter = new PrismaMariaDb(poolConfig);
+    return new PrismaClient({ adapter });
+  } catch (err) {
+    console.error("[PrismaDB] Error parsing DATABASE_URL, falling back to connection string:", err);
+    const adapter = new PrismaMariaDb(connectionString);
+    return new PrismaClient({ adapter });
+  }
 };
 
 declare global {

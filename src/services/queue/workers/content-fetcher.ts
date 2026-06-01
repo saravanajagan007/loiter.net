@@ -17,21 +17,62 @@ export const contentFetcherWorker = new Worker(
 
     if (!source || !source.isActive) return;
 
-    // For now, assume X platform and use the first connected account
+    // For now, assume X platform
     const xAccount = source.workspace.socialAccounts.find(a => a.platform === PlatformType.X);
-    if (!xAccount) return;
+    const accessToken = xAccount?.accessToken || "";
 
     const provider = getSocialProvider(PlatformType.X);
     let posts: SocialPost[] = [];
 
     if (source.type === SourceType.HANDLE) {
-      posts = await provider.fetchUserPosts(xAccount.accessToken, source.value);
+      posts = await provider.fetchUserPosts(accessToken, source.value);
     } else if (source.type === SourceType.HASHTAG) {
-      posts = await provider.searchHashtag(xAccount.accessToken, source.value);
+      posts = await provider.searchHashtag(accessToken, source.value);
     }
 
+    // Keep last fetched post for reference, so that next time can fetch posts after that.
+    // If there is no last post reference, then use current day posts for reference.
+    let lastFetchedPost = null;
+    if (source.type === SourceType.HANDLE) {
+      const cleanHandle = source.value.replace("@", "");
+      lastFetchedPost = await db.collectedPost.findFirst({
+        where: {
+          workspaceId: source.workspaceId,
+          authorHandle: cleanHandle,
+        },
+        orderBy: { postedAt: "desc" },
+      });
+    } else {
+      lastFetchedPost = await db.collectedPost.findFirst({
+        where: {
+          workspaceId: source.workspaceId,
+          content: {
+            contains: source.value,
+          },
+        },
+        orderBy: { postedAt: "desc" },
+      });
+    }
+
+    let referenceTime: Date;
+    if (lastFetchedPost) {
+      referenceTime = lastFetchedPost.postedAt;
+      console.log(`[ContentFetcher] Source "${source.value}": Last post reference found at ${referenceTime.toISOString()}`);
+    } else {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      referenceTime = today;
+      console.log(`[ContentFetcher] Source "${source.value}": No reference found. Using current day start ${referenceTime.toISOString()}`);
+    }
+
+    const newPosts = posts.filter(
+      (post) => new Date(post.postedAt).getTime() > referenceTime.getTime()
+    );
+
+    console.log(`[ContentFetcher] Source "${source.value}": Found ${newPosts.length} new posts (out of ${posts.length} fetched).`);
+
     // Save collected posts
-    for (const post of posts) {
+    for (const post of newPosts) {
       await db.collectedPost.upsert({
         where: {
           workspaceId_externalId_sourceType: {

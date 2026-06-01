@@ -18,7 +18,7 @@ export interface SocialProvider {
   platform: PlatformType;
   
   // Auth & Connection
-  getAuthUrl(state: string): { url: string; codeVerifier: string };
+  getAuthUrl(state: string): Promise<{ url: string; codeVerifier: string }>;
   exchangeCode(code: string, codeVerifier: string): Promise<{
     accessToken: string;
     refreshToken?: string;

@@ -98,6 +98,7 @@ model Workspace {
   orgId          String
   name           String
   slug           String
+  fetchInterval  Int             @default(60) // in minutes
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -186,7 +187,7 @@ model GeneratedPost {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   workspace        Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  collectedPost    CollectedPost? @relation(fields: [collectedPostId], references: [id])
+  collectedPost    CollectedPost? @relation(fields: [collectedPostId], references: [id], onDelete: SetNull)
   queuedPost       QueuedPost?
 }
 
@@ -290,4 +291,11 @@ model AuditLog {
   user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, entityType])
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

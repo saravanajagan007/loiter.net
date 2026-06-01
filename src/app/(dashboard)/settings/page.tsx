@@ -6,6 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { X, Trash2, Plus } from "lucide-react";
 import { connectX, disconnectAccount } from "./actions";
+import { SchedulerSettingsForm } from "./scheduler-settings-form";
+import { SystemSettingsForm } from "./system-settings-form";
+import { getSystemSetting } from "@/lib/settings";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -14,6 +17,42 @@ export default async function SettingsPage() {
   const socialAccounts = await db.socialAccount.findMany({
     where: { workspaceId: session.user.workspaceId },
   });
+
+  const workspace = await db.workspace.findUnique({
+    where: { id: session.user.workspaceId },
+    select: { fetchInterval: true },
+  });
+
+  const [
+    aiProvider,
+    geminiApiKey,
+    geminiModel,
+    openaiApiKey,
+    xClientId,
+    xClientSecret,
+    xCallbackUrl,
+    nitterInstanceUrl
+  ] = await Promise.all([
+    getSystemSetting("AI_PROVIDER"),
+    getSystemSetting("GEMINI_API_KEY"),
+    getSystemSetting("GEMINI_MODEL"),
+    getSystemSetting("OPENAI_API_KEY"),
+    getSystemSetting("X_CLIENT_ID"),
+    getSystemSetting("X_CLIENT_SECRET"),
+    getSystemSetting("X_CALLBACK_URL"),
+    getSystemSetting("NITTER_INSTANCE_URL"),
+  ]);
+
+  const initialSettings = {
+    AI_PROVIDER: aiProvider,
+    GEMINI_API_KEY: geminiApiKey,
+    GEMINI_MODEL: geminiModel,
+    OPENAI_API_KEY: openaiApiKey,
+    X_CLIENT_ID: xClientId,
+    X_CLIENT_SECRET: xClientSecret,
+    X_CALLBACK_URL: xCallbackUrl,
+    NITTER_INSTANCE_URL: nitterInstanceUrl,
+  };
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -68,6 +107,10 @@ export default async function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      <SchedulerSettingsForm initialInterval={workspace?.fetchInterval ?? 60} />
+
+      <SystemSettingsForm initialSettings={initialSettings} />
 
       <Card>
         <CardHeader>
