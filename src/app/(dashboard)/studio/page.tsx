@@ -9,9 +9,13 @@ export default async function StudioPage() {
   if (!session?.user.workspaceId) return null;
 
   const collectedPosts = await db.collectedPost.findMany({
-    where: { workspaceId: session.user.workspaceId },
+    where: { 
+      workspaceId: session.user.workspaceId,
+      generatedPosts: {
+        none: {}
+      }
+    },
     orderBy: { postedAt: "desc" },
-    take: 20,
   });
 
   const generatedPosts = await db.generatedPost.findMany({
@@ -25,7 +29,8 @@ export default async function StudioPage() {
     sourceType: p.sourceType,
     authorHandle: p.authorHandle,
     content: p.content,
-    postedAt: p.postedAt
+    postedAt: p.postedAt,
+    mediaUrls: p.mediaUrls ? (p.mediaUrls as string[]) : [],
   }));
 
   const formattedGenerated = generatedPosts.map(g => ({
@@ -39,7 +44,8 @@ export default async function StudioPage() {
       sourceType: g.collectedPost.sourceType,
       authorHandle: g.collectedPost.authorHandle,
       content: g.collectedPost.content,
-      postedAt: g.collectedPost.postedAt
+      postedAt: g.collectedPost.postedAt,
+      mediaUrls: g.collectedPost.mediaUrls ? (g.collectedPost.mediaUrls as string[]) : [],
     } : null
   }));
 

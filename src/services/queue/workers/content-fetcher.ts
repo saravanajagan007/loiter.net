@@ -89,9 +89,11 @@ export const contentFetcherWorker = new Worker(
           authorHandle: post.authorHandle,
           postedAt: post.postedAt,
           engagement: post.engagement as any,
+          mediaUrls: post.mediaUrls ? post.mediaUrls : undefined,
         },
         update: {
           engagement: post.engagement as any,
+          mediaUrls: post.mediaUrls ? post.mediaUrls : undefined,
         },
       });
     }

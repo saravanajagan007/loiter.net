@@ -55,9 +55,38 @@ export class XProvider implements SocialProvider {
     };
   }
 
-  async publishPost(accessToken: string, content: string): Promise<{ externalId: string }> {
+  async publishPost(accessToken: string, content: string, mediaUrls?: string[]): Promise<{ externalId: string }> {
     const client = new TwitterApi(accessToken);
-    const { data: tweet } = await client.v2.tweet(content);
+
+    let mediaIds: string[] = [];
+    if (mediaUrls && mediaUrls.length > 0) {
+      for (const mediaUrl of mediaUrls) {
+        try {
+          console.log(`[XProvider] Downloading media from: ${mediaUrl}`);
+          const response = await fetch(mediaUrl);
+          if (!response.ok) {
+            console.error(`Failed to fetch media: ${response.statusText}`);
+            continue;
+          }
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+
+          console.log(`[XProvider] Uploading media to Twitter/X...`);
+          const mediaId = await client.v1.uploadMedia(buffer, { mimeType: response.headers.get("content-type") || "image/jpeg" });
+          mediaIds.push(mediaId);
+          console.log(`[XProvider] Media uploaded successfully. Media ID: ${mediaId}`);
+        } catch (err: any) {
+          console.error(`[XProvider] Error uploading media ${mediaUrl}:`, err.message);
+        }
+      }
+    }
+
+    const tweetParams: any = {};
+    if (mediaIds.length > 0) {
+      tweetParams.media = { media_ids: mediaIds };
+    }
+
+    const { data: tweet } = await client.v2.tweet(content, tweetParams);
     return { externalId: tweet.id };
   }
 
@@ -108,6 +137,18 @@ export class XProvider implements SocialProvider {
           description = description.substring(9, description.length - 3).trim();
         }
 
+        const mediaUrls: string[] = [];
+        const imgRegex = /<img[^>]+src=["']([^"']+)["']/g;
+        let imgMatch;
+        while ((imgMatch = imgRegex.exec(description)) !== null) {
+          let src = imgMatch[1];
+          if (src.startsWith("/")) {
+            src = `${nitterUrl}${src}`;
+          }
+          src = src.replace(/&amp;/g, "&");
+          mediaUrls.push(src);
+        }
+
         const idMatch = /status\/(\d+)/.exec(guid || link);
         const externalId = idMatch ? idMatch[1] : Math.random().toString(36).substring(7);
 
@@ -131,6 +172,7 @@ export class XProvider implements SocialProvider {
           content,
           authorHandle: creator.replace("@", "") || cleanHandle,
           postedAt,
+          mediaUrls,
         });
         count++;
       }
@@ -189,6 +231,18 @@ export class XProvider implements SocialProvider {
           description = description.substring(9, description.length - 3).trim();
         }
 
+        const mediaUrls: string[] = [];
+        const imgRegex = /<img[^>]+src=["']([^"']+)["']/g;
+        let imgMatch;
+        while ((imgMatch = imgRegex.exec(description)) !== null) {
+          let src = imgMatch[1];
+          if (src.startsWith("/")) {
+            src = `${nitterUrl}${src}`;
+          }
+          src = src.replace(/&amp;/g, "&");
+          mediaUrls.push(src);
+        }
+
         const idMatch = /status\/(\d+)/.exec(guid || link);
         const externalId = idMatch ? idMatch[1] : Math.random().toString(36).substring(7);
 
@@ -212,6 +266,7 @@ export class XProvider implements SocialProvider {
           content,
           authorHandle: creator.replace("@", ""),
           postedAt,
+          mediaUrls,
         });
         count++;
       }

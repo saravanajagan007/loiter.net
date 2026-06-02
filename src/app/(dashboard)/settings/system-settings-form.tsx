@@ -18,6 +18,9 @@ interface SystemSettingsFormProps {
     X_CLIENT_SECRET: string;
     X_CALLBACK_URL: string;
     NITTER_INSTANCE_URL: string;
+    PUBLISHING_PROVIDER: string;
+    BUFFER_ACCESS_TOKEN: string;
+    BUFFER_PROFILE_ID: string;
   };
 }
 
@@ -29,6 +32,8 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [geminiModel, setGeminiModel] = useState(initialSettings.GEMINI_MODEL || "");
   const [xCallbackUrl, setXCallbackUrl] = useState(initialSettings.X_CALLBACK_URL || "");
   const [nitterInstanceUrl, setNitterInstanceUrl] = useState(initialSettings.NITTER_INSTANCE_URL || "");
+  const [publishingProvider, setPublishingProvider] = useState(initialSettings.PUBLISHING_PROVIDER || "native");
+  const [bufferProfileId, setBufferProfileId] = useState(initialSettings.BUFFER_PROFILE_ID || "");
 
   const getMaskedValue = (val: string) => {
     if (!val) return "";
@@ -192,6 +197,56 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                   onChange={(e) => setNitterInstanceUrl(e.target.value)}
                   disabled={isPending}
                   required
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Publishing Provider & Buffer Settings Section */}
+          <div className="space-y-4 pt-2">
+            <h3 className="text-sm font-semibold text-foreground border-b pb-2 tracking-wide uppercase text-muted-foreground/80">
+              Publishing Provider & Buffer Configuration
+            </h3>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-2">
+                <Label htmlFor="PUBLISHING_PROVIDER" className="text-sm font-medium">Publishing Method</Label>
+                <select
+                  id="PUBLISHING_PROVIDER"
+                  name="PUBLISHING_PROVIDER"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={publishingProvider}
+                  onChange={(e) => setPublishingProvider(e.target.value)}
+                  disabled={isPending}
+                >
+                  <option value="native">Native X (Twitter) API</option>
+                  <option value="buffer">Buffer API (Free Scheduling)</option>
+                </select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="BUFFER_PROFILE_ID" className="text-sm font-medium">Buffer Profile ID (Twitter)</Label>
+                <Input
+                  id="BUFFER_PROFILE_ID"
+                  name="BUFFER_PROFILE_ID"
+                  type="text"
+                  placeholder="e.g. 64a82b9..."
+                  value={bufferProfileId}
+                  onChange={(e) => setBufferProfileId(e.target.value)}
+                  disabled={isPending || publishingProvider !== "buffer"}
+                  required={publishingProvider === "buffer"}
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="BUFFER_ACCESS_TOKEN" className="text-sm font-medium">Buffer Access Token</Label>
+                <Input
+                  id="BUFFER_ACCESS_TOKEN"
+                  name="BUFFER_ACCESS_TOKEN"
+                  type="password"
+                  placeholder={initialSettings.BUFFER_ACCESS_TOKEN ? getMaskedValue(initialSettings.BUFFER_ACCESS_TOKEN) : "Enter Buffer Access Token"}
+                  disabled={isPending || publishingProvider !== "buffer"}
+                  required={publishingProvider === "buffer" && !initialSettings.BUFFER_ACCESS_TOKEN}
                 />
               </div>
             </div>

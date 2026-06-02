@@ -31,7 +31,10 @@ export default async function SettingsPage() {
     xClientId,
     xClientSecret,
     xCallbackUrl,
-    nitterInstanceUrl
+    nitterInstanceUrl,
+    publishingProvider,
+    bufferAccessToken,
+    bufferProfileId
   ] = await Promise.all([
     getSystemSetting("AI_PROVIDER"),
     getSystemSetting("GEMINI_API_KEY"),
@@ -41,6 +44,9 @@ export default async function SettingsPage() {
     getSystemSetting("X_CLIENT_SECRET"),
     getSystemSetting("X_CALLBACK_URL"),
     getSystemSetting("NITTER_INSTANCE_URL"),
+    getSystemSetting("PUBLISHING_PROVIDER"),
+    getSystemSetting("BUFFER_ACCESS_TOKEN"),
+    getSystemSetting("BUFFER_PROFILE_ID"),
   ]);
 
   const initialSettings = {
@@ -52,6 +58,9 @@ export default async function SettingsPage() {
     X_CLIENT_SECRET: xClientSecret,
     X_CALLBACK_URL: xCallbackUrl,
     NITTER_INSTANCE_URL: nitterInstanceUrl,
+    PUBLISHING_PROVIDER: publishingProvider || "native",
+    BUFFER_ACCESS_TOKEN: bufferAccessToken || "",
+    BUFFER_PROFILE_ID: bufferProfileId || "",
   };
 
   return (

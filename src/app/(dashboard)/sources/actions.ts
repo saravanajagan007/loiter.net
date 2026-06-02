@@ -139,3 +139,18 @@ export async function toggleSource(id: string, isActive: boolean) {
 
   revalidatePath("/sources");
 }
+
+export async function triggerManualFetch(sourceId: string) {
+  const session = await auth();
+  if (!session?.user.workspaceId) throw new Error("Unauthorized");
+
+  const source = await db.contentSource.findUnique({
+    where: { id: sourceId, workspaceId: session.user.workspaceId },
+  });
+
+  if (!source) throw new Error("Source not found");
+
+  const jobId = `manual-fetch-${source.id}-${Date.now()}`;
+  await contentFetcherQueue.add(jobId, { sourceId: source.id });
+  return { success: true };
+}

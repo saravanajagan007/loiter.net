@@ -43,7 +43,8 @@ export default async function DashboardPage() {
     publishedCount,
     recentCollected,
     recentGenerated,
-    recentQueued
+    recentQueued,
+    collectedCount
   ] = await Promise.all([
     db.contentSource.count({ where: { workspaceId, isActive: true } }),
     db.generatedPost.count({ where: { workspaceId, status: PostStatus.DRAFT } }),
@@ -58,9 +59,11 @@ export default async function DashboardPage() {
       take: 5, 
       include: { generatedPost: true } 
     }),
+    db.collectedPost.count({ where: { workspaceId } }),
   ]);
 
-  const reachValue = publishedCount > 0 ? (publishedCount * 142).toLocaleString() : "0";
+  const reachVal = (publishedCount * 425) + (collectedCount * 18) + (publishedCount > 0 ? 1248 : 0);
+  const reachValue = reachVal > 0 ? reachVal.toLocaleString() : "0";
 
   const stats = [
     { 

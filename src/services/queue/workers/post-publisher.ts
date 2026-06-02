@@ -3,6 +3,8 @@ import { QUEUES, workerOptions } from "../config";
 import db from "@/lib/db";
 import { getSocialProvider } from "../../social";
 import { QueueStatus } from "@prisma/client";
+import { getSystemSetting } from "@/lib/settings";
+import { publishViaBuffer } from "../../social/buffer";
 
 export const postPublisherWorker = new Worker(
   QUEUES.POST_PUBLISHER,
@@ -13,7 +15,11 @@ export const postPublisherWorker = new Worker(
       where: { id: queuedPostId },
       include: {
         workspace: { include: { socialAccounts: true } },
-        generatedPost: true,
+        generatedPost: {
+          include: {
+            collectedPost: true,
+          },
+        },
       },
     });
 
@@ -35,10 +41,36 @@ export const postPublisherWorker = new Worker(
         data: { status: QueueStatus.PROCESSING },
       });
 
-      const { externalId } = await provider.publishPost(
-        account.accessToken,
-        queuedPost.generatedPost.generatedContent
-      );
+      // Extract media URLs if available
+      const mediaUrls = (queuedPost.generatedPost.collectedPost?.mediaUrls as string[]) || undefined;
+
+      // Determine publishing provider setting (native or buffer)
+      const publishingProvider = (await getSystemSetting("PUBLISHING_PROVIDER")) || "native";
+      let externalId = "";
+
+      if (publishingProvider === "buffer") {
+        const bufferToken = await getSystemSetting("BUFFER_ACCESS_TOKEN");
+        const bufferProfileId = await getSystemSetting("BUFFER_PROFILE_ID");
+        
+        if (!bufferToken || !bufferProfileId) {
+          throw new Error("Buffer settings (Access Token or Profile ID) are missing");
+        }
+
+        externalId = await publishViaBuffer(
+          bufferToken,
+          bufferProfileId,
+          queuedPost.generatedPost.generatedContent,
+          mediaUrls
+        );
+      } else {
+        // Native Twitter X API
+        const response = await provider.publishPost(
+          account.accessToken,
+          queuedPost.generatedPost.generatedContent,
+          mediaUrls
+        );
+        externalId = response.externalId;
+      }
 
       await db.$transaction([
         db.publishedPost.create({

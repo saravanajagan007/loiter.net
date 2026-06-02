@@ -85,6 +85,10 @@ export async function updateSystemSettings(formData: FormData) {
   const xCallbackUrl = formData.get("X_CALLBACK_URL") as string;
   const nitterInstanceUrl = formData.get("NITTER_INSTANCE_URL") as string;
 
+  const publishingProvider = formData.get("PUBLISHING_PROVIDER") as string;
+  const bufferAccessToken = formData.get("BUFFER_ACCESS_TOKEN") as string;
+  const bufferProfileId = formData.get("BUFFER_PROFILE_ID") as string;
+
   if (aiProvider === "gemini" || aiProvider === "openai") {
     await updateSystemSetting("AI_PROVIDER", aiProvider);
   }
@@ -111,6 +115,16 @@ export async function updateSystemSettings(formData: FormData) {
   }
   if (nitterInstanceUrl !== null) {
     await updateSystemSetting("NITTER_INSTANCE_URL", nitterInstanceUrl);
+  }
+
+  if (publishingProvider === "native" || publishingProvider === "buffer") {
+    await updateSystemSetting("PUBLISHING_PROVIDER", publishingProvider);
+  }
+  if (!isMasked(bufferAccessToken)) {
+    await updateSystemSetting("BUFFER_ACCESS_TOKEN", bufferAccessToken);
+  }
+  if (bufferProfileId !== null) {
+    await updateSystemSetting("BUFFER_PROFILE_ID", bufferProfileId);
   }
 
   clearSettingsCache();
