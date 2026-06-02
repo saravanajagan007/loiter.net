@@ -2,7 +2,10 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 
 const prismaClientSingleton = () => {
-  const connectionString = process.env.DATABASE_URL || "mysql://root:rootpassword@127.0.0.1:3307/loiterdb";
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL environment variable is not defined");
+  }
   
   try {
     const parsed = new URL(connectionString);
