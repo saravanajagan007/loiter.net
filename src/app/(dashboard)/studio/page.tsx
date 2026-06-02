@@ -31,6 +31,7 @@ export default async function StudioPage() {
     content: p.content,
     postedAt: p.postedAt,
     mediaUrls: p.mediaUrls ? (p.mediaUrls as string[]) : [],
+    externalId: p.externalId,
   }));
 
   const formattedGenerated = generatedPosts.map(g => ({
@@ -46,6 +47,7 @@ export default async function StudioPage() {
       content: g.collectedPost.content,
       postedAt: g.collectedPost.postedAt,
       mediaUrls: g.collectedPost.mediaUrls ? (g.collectedPost.mediaUrls as string[]) : [],
+      externalId: g.collectedPost.externalId,
     } : null
   }));
 

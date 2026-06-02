@@ -219,6 +219,7 @@ enum QueueStatus {
   PROCESSING
   FAILED
   PUBLISHED
+  VERIFYING
 }
 
 model PublishedPost {

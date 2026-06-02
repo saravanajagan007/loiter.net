@@ -7,6 +7,7 @@ export const QUEUES = {
   AI_PROCESSOR: "ai-processor",
   POST_PUBLISHER: "post-publisher",
   ANALYTICS_SYNC: "analytics-sync",
+  POST_VERIFIER: "post-verifier",
 };
 
 // Queue instances
@@ -14,6 +15,7 @@ export const contentFetcherQueue = new Queue(QUEUES.CONTENT_FETCHER, { connectio
 export const aiProcessorQueue = new Queue(QUEUES.AI_PROCESSOR, { connection: redis });
 export const postPublisherQueue = new Queue(QUEUES.POST_PUBLISHER, { connection: redis });
 export const analyticsSyncQueue = new Queue(QUEUES.ANALYTICS_SYNC, { connection: redis });
+export const postVerifierQueue = new Queue(QUEUES.POST_VERIFIER, { connection: redis });
 
 // Shared worker options
 export const workerOptions = {

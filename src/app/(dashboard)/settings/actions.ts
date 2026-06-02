@@ -7,16 +7,22 @@ import db from "@/lib/db";
 import { cookies } from "next/headers";
 
 export async function connectX() {
+  console.log("[connectX] Server action started.");
   const session = await auth();
+  console.log("[connectX] Session resolved:", !!session, "workspaceId:", session?.user?.workspaceId);
   if (!session?.user.workspaceId) throw new Error("Unauthorized");
 
   const xProvider = new XProvider();
   const state = Math.random().toString(36).substring(7);
+  console.log("[connectX] Generating auth link for state:", state);
   const { url, codeVerifier } = await xProvider.getAuthUrl(state);
+  console.log("[connectX] Generated redirect URL:", url);
 
+  const isProd = process.env.NODE_ENV === "production";
   const cookieStore = await cookies();
-  cookieStore.set("x_oauth_state", state, { secure: true, httpOnly: true, maxAge: 600 });
-  cookieStore.set("x_oauth_code_verifier", codeVerifier, { secure: true, httpOnly: true, maxAge: 600 });
+  cookieStore.set("x_oauth_state", state, { secure: isProd, httpOnly: true, maxAge: 600 });
+  cookieStore.set("x_oauth_code_verifier", codeVerifier, { secure: isProd, httpOnly: true, maxAge: 600 });
+  console.log("[connectX] Cookies set. Redirecting...");
 
   redirect(url);
 }

@@ -8,6 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Calendar as CalendarIcon, Clock, ExternalLink, Play, Trash2, Loader2 } from "lucide-react";
 import { publishNow, cancelQueuedPost, markAsPosted } from "./actions";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 interface QueuedPost {
   id: string;
@@ -16,6 +23,15 @@ interface QueuedPost {
   status: string;
   generatedPost: {
     generatedContent: string;
+    collectedPost: {
+      id: string;
+      sourceType: string;
+      authorHandle: string | null;
+      content: string;
+      postedAt: Date;
+      mediaUrls: string[];
+      externalId: string | null;
+    } | null;
   };
   publishedPost: {
     externalId: string;
@@ -43,6 +59,60 @@ export function SchedulerTable({
   const [actioningId, setActioningId] = useState<string | null>(null);
   const router = useRouter();
 
+  const [previewMedia, setPreviewMedia] = useState<{
+    url: string;
+    isVideo: boolean;
+    externalId?: string;
+    authorHandle?: string;
+  } | null>(null);
+
+  const convertNitterUrlToTwitterCdn = (url: string): string => {
+    if (!url) return url;
+    const picIndex = url.indexOf("/pic/");
+    if (picIndex !== -1) {
+      const pathPart = url.substring(picIndex + 5);
+      try {
+        return `https://pbs.twimg.com/${decodeURIComponent(pathPart)}`;
+      } catch {
+        return `https://pbs.twimg.com/${pathPart.replace(/%2F/g, "/")}`;
+      }
+    }
+    return url;
+  };
+
+  const renderMedia = (post: { mediaUrls: string[]; externalId: string | null; authorHandle: string | null; }) => {
+    const urls = post.mediaUrls;
+    if (!urls || urls.length === 0) return null;
+    const hasVideo = urls.some(url => url.includes("video_thumb") || url.includes("ext_tw_video_thumb"));
+
+    return (
+      <div className="flex flex-wrap gap-1 mt-1.5 animate-in fade-in-50 duration-200">
+        {urls.map((url, index) => {
+          const cdnUrl = convertNitterUrlToTwitterCdn(url);
+          return (
+            <div 
+              key={index} 
+              className="relative w-12 h-12 rounded-md overflow-hidden border border-border/60 cursor-zoom-in hover:brightness-90 transition-all group"
+              onClick={() => setPreviewMedia({
+                url: cdnUrl,
+                isVideo: hasVideo,
+                externalId: post.externalId || undefined,
+                authorHandle: post.authorHandle || undefined
+              })}
+            >
+              <img src={cdnUrl} alt="media" referrerPolicy="no-referrer" className="object-cover w-full h-full" />
+              {hasVideo && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:bg-black/35 transition-colors">
+                  <Play className="h-5 w-5 text-white drop-shadow-md fill-white" />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const handleSort = (newSortBy: string) => {
     const params = new URLSearchParams(window.location.search);
     params.set("sortBy", newSortBy);
@@ -64,22 +134,35 @@ export function SchedulerTable({
     router.push(`?${params.toString()}`);
   };
 
-  const handleManualPost = (id: string, content: string) => {
+  const handleManualPost = (id: string, content: string, mediaUrls?: string[]) => {
     navigator.clipboard.writeText(content)
       .then(() => {
-        toast.success(
-          connectedHandle
-            ? `Copied! Please verify you are logged into @${connectedHandle} on X.`
-            : "Copied content to clipboard!"
-        );
+        if (mediaUrls && mediaUrls.length > 0) {
+          toast.success("Text copied! We have opened the media attachments in new tabs. Right-click copy and paste them on X.");
+        } else {
+          toast.success(
+            connectedHandle
+              ? `Copied! Please verify you are logged into @${connectedHandle} on X.`
+              : "Copied content to clipboard!"
+          );
+        }
       })
       .catch((err) => {
         console.error("Could not copy: ", err);
         toast.error("Failed to copy to clipboard.");
       });
     
-    const url = `https://x.com/intent/post?text=${encodeURIComponent(content)}`;
-    window.open(url, "_blank");
+    // Open Twitter compose page
+    const composeUrl = `https://x.com/intent/post?text=${encodeURIComponent(content)}`;
+    window.open(composeUrl, "_blank");
+
+    // Open each media attachment URL in a new tab
+    if (mediaUrls && mediaUrls.length > 0) {
+      mediaUrls.forEach((url) => {
+        const cdnUrl = convertNitterUrlToTwitterCdn(url);
+        window.open(cdnUrl, "_blank");
+      });
+    }
 
     startTransition(async () => {
       try {
@@ -176,13 +259,14 @@ export function SchedulerTable({
                 return (
                   <TableRow 
                     key={post.id} 
-                    className={`transition-colors ${isPublished ? "opacity-60 bg-muted/20 select-none hover:bg-muted/25" : "hover:bg-muted/30"}`}
+                    className={isPublished ? "opacity-60 bg-muted/20 select-none hover:bg-muted/25" : ""}
                   >
                     <TableCell>
                       <Badge variant="outline" className="font-semibold text-xs tracking-wider uppercase">{post.platform}</Badge>
                     </TableCell>
-                    <TableCell className="max-w-[200px] sm:max-w-md truncate font-medium text-sm">
-                      {post.generatedPost.generatedContent}
+                    <TableCell className="max-w-md text-sm font-medium text-foreground">
+                      <p className="whitespace-pre-wrap leading-relaxed">{post.generatedPost.generatedContent}</p>
+                      {post.generatedPost.collectedPost && renderMedia(post.generatedPost.collectedPost)}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col text-xs">
@@ -198,7 +282,11 @@ export function SchedulerTable({
                     </TableCell>
                     <TableCell>
                       <Badge
-                        className="text-xs font-semibold tracking-wider animate-pulse-slow"
+                        className={`text-xs font-semibold tracking-wider animate-pulse-slow ${
+                          post.status === "VERIFYING"
+                            ? "bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border border-amber-500/20 shadow-none"
+                            : ""
+                        }`}
                         variant={
                           post.status === "PUBLISHED" ? "default" :
                           post.status === "FAILED" ? "destructive" : "secondary"
@@ -212,7 +300,7 @@ export function SchedulerTable({
                         variant="outline"
                         size="sm"
                         className="flex items-center gap-1.5 text-xs font-semibold hover:bg-sky-500/10 hover:text-sky-500 cursor-pointer border border-muted-foreground/30 shadow-xs h-8 disabled:opacity-50 disabled:pointer-events-none"
-                        onClick={() => handleManualPost(post.id, post.generatedPost.generatedContent)}
+                        onClick={() => handleManualPost(post.id, post.generatedPost.generatedContent, post.generatedPost.collectedPost?.mediaUrls)}
                         disabled={isPublished || isPending}
                       >
                         <ExternalLink className="h-3.5 w-3.5" /> Post Manually
@@ -309,6 +397,58 @@ export function SchedulerTable({
           </Button>
         </div>
       )}
+
+      {/* --- LIGHTBOX/VIDEO DIALOG --- */}
+      <Dialog open={previewMedia !== null} onOpenChange={(open) => !open && setPreviewMedia(null)}>
+        <DialogContent className={previewMedia?.isVideo ? "max-w-md p-0 overflow-hidden" : "max-w-3xl border-none bg-transparent p-0 overflow-hidden shadow-none flex items-center justify-center"}>
+          {previewMedia && (
+            previewMedia.isVideo ? (
+              <div className="space-y-4 p-5 text-center bg-popover text-popover-foreground border rounded-lg">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center justify-center gap-2 text-xl font-bold">
+                    <Play className="h-6 w-6 text-indigo-500 fill-indigo-500/20" />
+                    <span>Watch Video Content</span>
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="relative aspect-video rounded-lg overflow-hidden border border-border shadow-md bg-muted flex flex-col items-center justify-center p-6">
+                  <img 
+                    src={previewMedia.url} 
+                    alt="Video thumbnail" 
+                    referrerPolicy="no-referrer" 
+                    className="absolute inset-0 w-full h-full object-cover opacity-35 blur-xs" 
+                  />
+                  <div className="relative z-10 space-y-2 text-center max-w-sm">
+                    <p className="text-sm font-semibold text-foreground">External Media Source</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Due to platform API and Nitter restrictions, the original video streaming file cannot be played directly inside the dashboard.
+                    </p>
+                  </div>
+                </div>
+                <DialogFooter className="flex sm:justify-center gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => setPreviewMedia(null)} className="h-9 cursor-pointer">
+                    Close
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    onClick={() => {
+                      const tweetUrl = previewMedia.externalId 
+                        ? `https://twitter.com/${previewMedia.authorHandle || "i"}/status/${previewMedia.externalId}`
+                        : `https://twitter.com`;
+                      window.open(tweetUrl, "_blank", "noopener,noreferrer");
+                    }} 
+                    className="h-9 bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Watch on X/Twitter
+                  </Button>
+                </DialogFooter>
+              </div>
+            ) : (
+              <img src={previewMedia.url} alt="Preview" referrerPolicy="no-referrer" className="max-h-[85vh] object-contain rounded-lg shadow-2xl bg-black/5" />
+            )
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

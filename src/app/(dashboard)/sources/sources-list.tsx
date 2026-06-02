@@ -112,7 +112,7 @@ export function SourcesList({ sources }: { sources: Source[] }) {
               const isToggling = togglingId === source.id;
               const isPulling = pullingId === source.id;
               return (
-                <TableRow key={source.id} className="hover:bg-muted/30 transition-colors">
+                <TableRow key={source.id}>
                   <TableCell>
                     <Badge variant="outline" className="font-semibold text-xs tracking-wider uppercase">{source.type}</Badge>
                   </TableCell>

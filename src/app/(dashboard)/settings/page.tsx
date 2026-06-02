@@ -82,7 +82,7 @@ export default async function SettingsPage() {
             <div className="text-center py-6 border-2 border-dashed rounded-lg">
               <p className="text-sm text-muted-foreground mb-4">No accounts connected yet.</p>
               <form action={connectX}>
-                <Button>
+                <Button type="submit">
                   <X className="mr-2 h-4 w-4" /> Connect X (Twitter)
                 </Button>
               </form>
@@ -108,7 +108,7 @@ export default async function SettingsPage() {
                 </div>
               ))}
               <form action={connectX}>
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full" type="submit">
                   <Plus className="mr-2 h-4 w-4" /> Add Another Account
                 </Button>
               </form>

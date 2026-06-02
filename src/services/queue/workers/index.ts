@@ -1,15 +1,15 @@
 import "./content-fetcher";
 import "./ai-processor";
 import "./post-publisher";
+import "./post-verifier";
 import db from "@/lib/db";
-import { contentFetcherQueue } from "../config";
+import { contentFetcherQueue, postVerifierQueue } from "../config";
 
 console.log("Queue workers started successfully.");
 console.log(`[Startup] NITTER_INSTANCE_URL: ${process.env.NITTER_INSTANCE_URL}`);
 
 async function triggerFetchOnStartup() {
   try {
-    console.log("[Startup] Redeployment detected. Triggering fetch for active sources immediately...");
     const activeSources = await db.contentSource.findMany({
       where: { isActive: true },
     });
@@ -31,4 +31,25 @@ async function triggerFetchOnStartup() {
   }
 }
 
+async function setupVerificationCron() {
+  try {
+    const repeatableJobs = await postVerifierQueue.getRepeatableJobs();
+    const hasJob = repeatableJobs.some(job => job.id === "verify-posts-job" || job.name === "verify-posts-job");
+    if (!hasJob) {
+      await postVerifierQueue.add(
+        "verify-posts-job",
+        {},
+        {
+          repeat: { every: 60 * 1000 }, // Run every 60 seconds
+          jobId: "verify-posts-job",
+        }
+      );
+      console.log("[Startup] Post verification cron scheduled to run every 60 seconds.");
+    }
+  } catch (err) {
+    console.error("[Startup] Failed to setup post verification cron:", err);
+  }
+}
+
 triggerFetchOnStartup();
+setupVerificationCron();

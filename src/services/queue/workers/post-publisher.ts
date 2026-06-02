@@ -72,20 +72,10 @@ export const postPublisherWorker = new Worker(
         externalId = response.externalId;
       }
 
-      await db.$transaction([
-        db.publishedPost.create({
-          data: {
-            workspaceId: queuedPost.workspaceId,
-            queuedPostId: queuedPost.id,
-            platform: queuedPost.platform,
-            externalId,
-          },
-        }),
-        db.queuedPost.update({
-          where: { id: queuedPostId },
-          data: { status: QueueStatus.PUBLISHED },
-        }),
-      ]);
+      await db.queuedPost.update({
+        where: { id: queuedPostId },
+        data: { status: "VERIFYING" as any },
+      });
     } catch (error: any) {
       await db.queuedPost.update({
         where: { id: queuedPostId },

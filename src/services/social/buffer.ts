@@ -14,9 +14,19 @@ export async function publishViaBuffer(
   };
 
   if (mediaUrls && mediaUrls.length > 0) {
+    let mediaUrl = mediaUrls[0];
+    const picIndex = mediaUrl.indexOf("/pic/");
+    if (picIndex !== -1) {
+      const pathPart = mediaUrl.substring(picIndex + 5);
+      try {
+        mediaUrl = `https://pbs.twimg.com/${decodeURIComponent(pathPart)}`;
+      } catch {
+        mediaUrl = `https://pbs.twimg.com/${pathPart.replace(/%2F/g, "/")}`;
+      }
+    }
     body.media = {
-      photo: mediaUrls[0],
-      thumbnail: mediaUrls[0],
+      picture: mediaUrl,
+      thumbnail: mediaUrl,
     };
   }
 

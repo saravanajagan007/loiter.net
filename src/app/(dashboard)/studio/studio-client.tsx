@@ -29,7 +29,9 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
-  Send
+  Send,
+  Play,
+  ExternalLink
 } from "lucide-react";
 import {
   generateAIVersion,
@@ -54,6 +56,7 @@ interface CollectedPost {
   content: string;
   postedAt: Date;
   mediaUrls: string[];
+  externalId: string | null;
 }
 
 interface GeneratedPost {
@@ -69,6 +72,7 @@ interface GeneratedPost {
     content: string;
     postedAt: Date;
     mediaUrls: string[];
+    externalId: string | null;
   } | null;
 }
 
@@ -111,7 +115,12 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
   const [scheduleTime, setScheduleTime] = useState("");
 
   // Media preview lightbox state
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewMedia, setPreviewMedia] = useState<{
+    url: string;
+    isVideo: boolean;
+    externalId?: string;
+    authorHandle?: string;
+  } | null>(null);
 
   // Active action IDs for loading spinners
   const [actioningId, setActioningId] = useState<string | null>(null);
@@ -144,8 +153,12 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
     setActioningId(`remix-${postId}`);
     startTransition(async () => {
       try {
-        await generateAIVersion(postId, tone);
-        toast.success("AI draft generated successfully!");
+        const res = await generateAIVersion(postId, tone);
+        if (res && res.fallback) {
+          toast.success("Post remixed (Procedural Fallback used)");
+        } else {
+          toast.success("AI draft generated successfully!");
+        }
         setActiveTab("drafts");
         setActiveDraftSubTab("pending");
       } catch (err: any) {
@@ -162,8 +175,12 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
     setActioningId("bulk-remix");
     startTransition(async () => {
       try {
-        await generateAIVersions(selectedDiscoveryIds, tone);
-        toast.success(`AI drafts generated for ${selectedDiscoveryIds.length} posts!`);
+        const res = await generateAIVersions(selectedDiscoveryIds, tone);
+        if (res && res.fallbackCount && res.fallbackCount > 0) {
+          toast.success(`Bulk remix complete. ${res.successCount} generated via AI, ${res.fallbackCount} generated via Fallback.`);
+        } else {
+          toast.success(`AI drafts generated for ${selectedDiscoveryIds.length} posts!`);
+        }
         setSelectedDiscoveryIds([]);
         setActiveTab("drafts");
         setActiveDraftSubTab("pending");
@@ -388,19 +405,49 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
   };
 
   // --- RENDER HELPERS ---
-  const renderMedia = (urls: string[]) => {
+  const convertNitterUrlToTwitterCdn = (url: string): string => {
+    if (!url) return url;
+    const picIndex = url.indexOf("/pic/");
+    if (picIndex !== -1) {
+      const pathPart = url.substring(picIndex + 5);
+      try {
+        return `https://pbs.twimg.com/${decodeURIComponent(pathPart)}`;
+      } catch {
+        return `https://pbs.twimg.com/${pathPart.replace(/%2F/g, "/")}`;
+      }
+    }
+    return url;
+  };
+
+  const renderMedia = (post: { mediaUrls: string[]; externalId: string | null; authorHandle: string | null; }) => {
+    const urls = post.mediaUrls;
     if (!urls || urls.length === 0) return null;
+    const hasVideo = urls.some(url => url.includes("video_thumb") || url.includes("ext_tw_video_thumb"));
+
     return (
       <div className="flex flex-wrap gap-1 mt-1.5">
-        {urls.map((url, index) => (
-          <div 
-            key={index} 
-            className="relative w-12 h-12 rounded-md overflow-hidden border border-border/60 cursor-zoom-in hover:brightness-90 transition-all"
-            onClick={() => setPreviewImage(url)}
-          >
-            <img src={url} alt="media" className="object-cover w-full h-full" />
-          </div>
-        ))}
+        {urls.map((url, index) => {
+          const cdnUrl = convertNitterUrlToTwitterCdn(url);
+          return (
+            <div 
+              key={index} 
+              className="relative w-12 h-12 rounded-md overflow-hidden border border-border/60 cursor-zoom-in hover:brightness-90 transition-all group"
+              onClick={() => setPreviewMedia({
+                url: cdnUrl,
+                isVideo: hasVideo,
+                externalId: post.externalId || undefined,
+                authorHandle: post.authorHandle || undefined
+              })}
+            >
+              <img src={cdnUrl} alt="media" referrerPolicy="no-referrer" className="object-cover w-full h-full" />
+              {hasVideo && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:bg-black/35 transition-colors">
+                  <Play className="h-5 w-5 text-white drop-shadow-md fill-white" />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -514,7 +561,7 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
                         const isRemixing = actioningId?.startsWith(`remix-${post.id}`);
                         const isDeleting = actioningId === `delete-${post.id}`;
                         return (
-                          <TableRow key={post.id} className={`hover:bg-muted/10 transition-colors ${isSelected ? "bg-primary/5 hover:bg-primary/10" : ""}`}>
+                          <TableRow key={post.id} className={isSelected ? "bg-primary/5 hover:bg-primary/10" : ""}>
                             <TableCell>
                               <input
                                 type="checkbox"
@@ -536,8 +583,8 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
                               @{post.authorHandle || "Anonymous"}
                             </TableCell>
                             <TableCell className="text-sm font-medium text-muted-foreground max-w-lg">
-                              <p className="line-clamp-2 leading-relaxed">&quot;{post.content}&quot;</p>
-                              {renderMedia(post.mediaUrls)}
+                              <p className="whitespace-pre-wrap leading-relaxed">&quot;{post.content}&quot;</p>
+                              {renderMedia(post)}
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground font-semibold">
                               {new Date(post.postedAt).toLocaleDateString()}
@@ -746,7 +793,7 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
                             const isRejectLoading = actioningId === `reject-${draft.id}`;
                             const isDeleteLoading = actioningId === `delete-draft-${draft.id}`;
                             return (
-                              <TableRow key={draft.id} className={`hover:bg-muted/10 transition-colors ${isSelected ? "bg-primary/5 hover:bg-primary/10" : ""}`}>
+                              <TableRow key={draft.id} className={isSelected ? "bg-primary/5 hover:bg-primary/10" : ""}>
                                 <TableCell>
                                   <input
                                     type="checkbox"
@@ -766,12 +813,12 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
                                     <Sparkles className="mr-1 h-3 w-3 text-yellow-400" /> {draft.tone}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="text-xs text-muted-foreground max-w-[200px]">
+                                <TableCell className="text-xs text-muted-foreground max-w-xs">
                                   {draft.collectedPost ? (
                                     <div className="space-y-1">
                                       <p className="font-semibold text-foreground/80">@{draft.collectedPost.authorHandle || "Anonymous"}</p>
-                                      <p className="line-clamp-2 leading-relaxed italic">&quot;{draft.collectedPost.content}&quot;</p>
-                                      {renderMedia(draft.collectedPost.mediaUrls)}
+                                      <p className="whitespace-pre-wrap leading-relaxed italic">&quot;{draft.collectedPost.content}&quot;</p>
+                                      {renderMedia(draft.collectedPost)}
                                     </div>
                                   ) : (
                                     <span className="italic text-muted-foreground/60">Manual input</span>
@@ -779,6 +826,7 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
                                 </TableCell>
                                 <TableCell className="text-sm font-medium text-foreground max-w-md">
                                   <p className="whitespace-pre-wrap leading-relaxed">{draft.generatedContent}</p>
+                                  {draft.collectedPost && renderMedia(draft.collectedPost)}
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <div className="flex items-center justify-end gap-1">
@@ -980,7 +1028,7 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
                             const isSelected = selectedApprovedIds.includes(draft.id);
                             const isDeleteLoading = actioningId === `delete-draft-${draft.id}`;
                             return (
-                              <TableRow key={draft.id} className={`hover:bg-muted/10 transition-colors ${isSelected ? "bg-primary/5 hover:bg-primary/10" : ""}`}>
+                              <TableRow key={draft.id} className={isSelected ? "bg-primary/5 hover:bg-primary/10" : ""}>
                                 <TableCell>
                                   <input
                                     type="checkbox"
@@ -1002,6 +1050,7 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
                                 </TableCell>
                                 <TableCell className="text-sm font-semibold text-foreground max-w-md">
                                   <p className="whitespace-pre-wrap leading-relaxed">{draft.generatedContent}</p>
+                                  {draft.collectedPost && renderMedia(draft.collectedPost)}
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">
                                   <div className="flex flex-col gap-1">
@@ -1149,7 +1198,7 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
                             const isSelected = selectedRejectedIds.includes(draft.id);
                             const isDeleteLoading = actioningId === `delete-draft-${draft.id}`;
                             return (
-                              <TableRow key={draft.id} className={`hover:bg-muted/10 transition-colors ${isSelected ? "bg-primary/5 hover:bg-primary/10" : ""}`}>
+                              <TableRow key={draft.id} className={isSelected ? "bg-primary/5 hover:bg-primary/10" : ""}>
                                 <TableCell>
                                   <input
                                     type="checkbox"
@@ -1171,6 +1220,7 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
                                 </TableCell>
                                 <TableCell className="text-sm text-muted-foreground max-w-md line-through decoration-muted-foreground/30">
                                   <p className="whitespace-pre-wrap leading-relaxed">{draft.generatedContent}</p>
+                                  {draft.collectedPost && renderMedia(draft.collectedPost)}
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">
                                   <span className="text-destructive font-bold flex items-center gap-1">
@@ -1259,6 +1309,12 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
             <p className="text-right text-xs text-muted-foreground mt-1 font-semibold">
               {280 - editedContent.length} characters remaining
             </p>
+            {editingDraft?.collectedPost && (
+              <div className="mt-3 pt-3 border-t border-border/50">
+                <p className="text-xs font-semibold text-muted-foreground mb-1.5">Attached Media</p>
+                {renderMedia(editingDraft.collectedPost)}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setEditingDraft(null)} className="h-9 cursor-pointer">
@@ -1302,11 +1358,54 @@ export function StudioClient({ collectedPosts, generatedPosts }: StudioClientPro
         </DialogContent>
       </Dialog>
 
-      {/* --- LIGHTBOX DIALOG --- */}
-      <Dialog open={previewImage !== null} onOpenChange={(open) => !open && setPreviewImage(null)}>
-        <DialogContent className="max-w-3xl border-none bg-transparent p-0 overflow-hidden shadow-none flex items-center justify-center">
-          {previewImage && (
-            <img src={previewImage} alt="Preview" className="max-h-[85vh] object-contain rounded-lg shadow-2xl bg-black/5" />
+      {/* --- LIGHTBOX/VIDEO DIALOG --- */}
+      <Dialog open={previewMedia !== null} onOpenChange={(open) => !open && setPreviewMedia(null)}>
+        <DialogContent className={previewMedia?.isVideo ? "max-w-md p-0 overflow-hidden" : "max-w-3xl border-none bg-transparent p-0 overflow-hidden shadow-none flex items-center justify-center"}>
+          {previewMedia && (
+            previewMedia.isVideo ? (
+              <div className="space-y-4 p-5 text-center bg-popover text-popover-foreground border rounded-lg">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center justify-center gap-2 text-xl font-bold">
+                    <Play className="h-6 w-6 text-indigo-500 fill-indigo-500/20" />
+                    <span>Watch Video Content</span>
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="relative aspect-video rounded-lg overflow-hidden border border-border shadow-md bg-muted flex flex-col items-center justify-center p-6">
+                  <img 
+                    src={previewMedia.url} 
+                    alt="Video thumbnail" 
+                    referrerPolicy="no-referrer" 
+                    className="absolute inset-0 w-full h-full object-cover opacity-35 blur-xs" 
+                  />
+                  <div className="relative z-10 space-y-2 text-center max-w-sm">
+                    <p className="text-sm font-semibold text-foreground">External Media Source</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Due to platform API and Nitter restrictions, the original video streaming file cannot be played directly inside the dashboard.
+                    </p>
+                  </div>
+                </div>
+                <DialogFooter className="flex sm:justify-center gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => setPreviewMedia(null)} className="h-9 cursor-pointer">
+                    Close
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    onClick={() => {
+                      const tweetUrl = previewMedia.externalId 
+                        ? `https://twitter.com/${previewMedia.authorHandle || "i"}/status/${previewMedia.externalId}`
+                        : `https://twitter.com`;
+                      window.open(tweetUrl, "_blank", "noopener,noreferrer");
+                    }} 
+                    className="h-9 bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Watch on X/Twitter
+                  </Button>
+                </DialogFooter>
+              </div>
+            ) : (
+              <img src={previewMedia.url} alt="Preview" referrerPolicy="no-referrer" className="max-h-[85vh] object-contain rounded-lg shadow-2xl bg-black/5" />
+            )
           )}
         </DialogContent>
       </Dialog>

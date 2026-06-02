@@ -4,7 +4,7 @@ import db from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { postPublisherQueue } from "@/services/queue/config";
 import { revalidatePath } from "next/cache";
-import { PostStatus } from "@prisma/client";
+import { PostStatus, QueueStatus } from "@prisma/client";
 
 export async function publishNow(queuedPostId: string) {
   const session = await auth();
@@ -82,7 +82,7 @@ export async function markAsPosted(queuedPostId: string) {
 
   await db.queuedPost.update({
     where: { id: queuedPostId, workspaceId: session.user.workspaceId },
-    data: { status: "PUBLISHED" },
+    data: { status: QueueStatus.VERIFYING },
   });
 
   revalidatePath("/scheduler");

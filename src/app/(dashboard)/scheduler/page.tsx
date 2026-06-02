@@ -45,11 +45,40 @@ export default async function SchedulerPage({
 
   const queuedPosts = await db.queuedPost.findMany({
     where: { workspaceId: session.user.workspaceId },
-    include: { generatedPost: true, publishedPost: true },
+    include: {
+      generatedPost: {
+        include: {
+          collectedPost: true,
+        },
+      },
+      publishedPost: true,
+    },
     orderBy,
     skip,
     take: limit,
   });
+
+  const formattedQueued = queuedPosts.map(qp => ({
+    id: qp.id,
+    platform: qp.platform,
+    scheduledFor: qp.scheduledFor,
+    status: qp.status,
+    generatedPost: {
+      generatedContent: qp.generatedPost.generatedContent,
+      collectedPost: qp.generatedPost.collectedPost ? {
+        id: qp.generatedPost.collectedPost.id,
+        sourceType: qp.generatedPost.collectedPost.sourceType,
+        authorHandle: qp.generatedPost.collectedPost.authorHandle,
+        content: qp.generatedPost.collectedPost.content,
+        postedAt: qp.generatedPost.collectedPost.postedAt,
+        mediaUrls: qp.generatedPost.collectedPost.mediaUrls ? (qp.generatedPost.collectedPost.mediaUrls as string[]) : [],
+        externalId: qp.generatedPost.collectedPost.externalId,
+      } : null
+    },
+    publishedPost: qp.publishedPost ? {
+      externalId: qp.publishedPost.externalId,
+    } : null
+  }));
 
   const totalPages = Math.ceil(totalPosts / limit) || 1;
 
@@ -76,7 +105,7 @@ export default async function SchedulerPage({
         </CardHeader>
         <CardContent>
           <SchedulerTable 
-            queuedPosts={queuedPosts} 
+            queuedPosts={formattedQueued} 
             connectedHandle={connectedHandle}
             page={page}
             totalPages={totalPages}
