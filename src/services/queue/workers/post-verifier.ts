@@ -13,7 +13,12 @@ export const postVerifierWorker = new Worker(
     const verifyingPosts = await db.queuedPost.findMany({
       where: { status: "VERIFYING" as any },
       include: {
-        workspace: { include: { socialAccounts: true } },
+        workspace: { 
+          include: { 
+            socialAccounts: true,
+            contentSources: true
+          } 
+        },
         generatedPost: {
           include: {
             collectedPost: true,
@@ -36,7 +41,21 @@ export const postVerifierWorker = new Worker(
           (a) => a.platform === queuedPost.platform
         );
 
-        if (!account || !account.handle) {
+        let handle = account?.handle;
+        let token = account?.accessToken || "";
+
+        if (!handle) {
+          // Fallback: Check if there's any active HANDLE type content source in the workspace
+          const firstHandleSource = queuedPost.workspace.contentSources.find(
+            (s) => s.type === "HANDLE" && s.isActive
+          );
+          if (firstHandleSource) {
+            handle = firstHandleSource.value.replace("@", "");
+            console.log(`[Verifier Worker] No connected account found. Falling back to active content source handle: @${handle}`);
+          }
+        }
+
+        if (!handle) {
           console.warn(`[Verifier Worker] No handle found for connected platform ${queuedPost.platform} in workspace ${queuedPost.workspaceId}`);
           continue;
         }
@@ -44,8 +63,8 @@ export const postVerifierWorker = new Worker(
         const provider = getSocialProvider(queuedPost.platform);
         
         // Fetch recent posts from the user's timeline (e.g. limit to 10)
-        console.log(`[Verifier Worker] Fetching timeline for user @${account.handle}...`);
-        const recentPosts = await provider.fetchUserPosts(account.accessToken, account.handle, 10);
+        console.log(`[Verifier Worker] Fetching timeline for user @${handle}...`);
+        const recentPosts = await provider.fetchUserPosts(token, handle, 10);
         
         const draftContent = queuedPost.generatedPost.generatedContent;
         let isPublished = false;
