@@ -111,6 +111,77 @@ export async function getRotatedBufferKey(bufferToken: string): Promise<string> 
   throw new Error("All provided Buffer API keys have hit their rate limits (100 calls/15m or 500 calls/24h)");
 }
 
+async function fetchGraphQL(token: string, query: string, variables: any = {}) {
+  const url = "https://api.buffer.com";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ query, variables })
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`HTTP ${res.status}: ${txt}`);
+  }
+
+  const payload = await res.json();
+  if (payload.errors) {
+    throw new Error(`GraphQL Errors: ${JSON.stringify(payload.errors)}`);
+  }
+
+  return payload.data;
+}
+
+async function resolveChannelId(token: string, targetProfile: string): Promise<string> {
+  const orgQuery = `
+    query GetOrganizations {
+      account {
+        organizations {
+          id
+          name
+        }
+      }
+    }
+  `;
+
+  const orgData = await fetchGraphQL(token, orgQuery);
+  const orgs = orgData.account?.organizations || [];
+  
+  for (const org of orgs) {
+    const channelsQuery = `
+      query GetChannels($orgId: OrganizationId!) {
+        channels(input: { organizationId: $orgId }) {
+          id
+          name
+          displayName
+          service
+        }
+      }
+    `;
+
+    const channelsData = await fetchGraphQL(token, channelsQuery, { orgId: org.id });
+    const channels = channelsData.channels || [];
+    const matched = channels.find(
+      (c: any) =>
+        c.id === targetProfile ||
+        c.name.toLowerCase() === targetProfile.toLowerCase() ||
+        c.displayName.toLowerCase() === targetProfile.toLowerCase()
+    );
+
+    if (matched) {
+      console.log(`[BufferProvider] Resolved profile "${targetProfile}" to channel ID: ${matched.id} (${matched.service})`);
+      return matched.id;
+    }
+  }
+
+  // Fallback to targetProfile directly if no match is found (assuming it might be a raw channel ID already)
+  console.warn(`[BufferProvider] Could not find matched channel for profile name "${targetProfile}". Defaulting to raw ID.`);
+  return targetProfile;
+}
+
 export async function publishViaBuffer(
   accessToken: string,
   profileId: string,
@@ -137,15 +208,11 @@ export async function publishViaBuffer(
 
   const allMediaUrls = Array.from(new Set([...(mediaUrls || []), ...extractedUrls]));
 
-  const url = "https://api.bufferapp.com/1/updates/create.json";
+  // Dynamically resolve the Buffer channel ID
+  const resolvedId = await resolveChannelId(activeKey, profileId);
 
-  const body: any = {
-    text: cleanedContent,
-    profile_ids: [profileId],
-    now: true,
-    shorten: false,
-  };
-
+  // Prepare assets payload
+  const assets: any[] = [];
   if (allMediaUrls.length > 0) {
     let mediaUrl = allMediaUrls[0];
     const picIndex = mediaUrl.indexOf("/pic/");
@@ -157,33 +224,61 @@ export async function publishViaBuffer(
         mediaUrl = `https://pbs.twimg.com/${pathPart.replace(/%2F/g, "/")}`;
       }
     }
-    body.media = {
-      picture: mediaUrl,
-      thumbnail: mediaUrl,
-    };
+
+    const isVideo = mediaUrl.toLowerCase().includes(".mp4") || mediaUrl.toLowerCase().includes("video");
+    if (isVideo) {
+      assets.push({
+        video: {
+          url: mediaUrl
+        }
+      });
+    } else {
+      assets.push({
+        image: {
+          url: mediaUrl
+        }
+      });
+    }
   }
 
-  console.log(`[BufferProvider] Sending post to Buffer profile ${profileId}...`);
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${activeKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  const createPostMutation = `
+    mutation CreatePost($input: CreatePostInput!) {
+      createPost(input: $input) {
+        ... on PostActionSuccess {
+          post {
+            id
+          }
+        }
+        ... on MutationError {
+          message
+        }
+      }
+    }
+  `;
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Buffer API returned status ${res.status}: ${errorText}`);
+  const input: any = {
+    channelId: resolvedId,
+    text: cleanedContent,
+    schedulingType: "automatic",
+    mode: "shareNow"
+  };
+
+  if (assets.length > 0) {
+    input.assets = assets;
   }
 
-  const data = await res.json();
-  if (data.updates && data.updates.length > 0) {
-    console.log(`[BufferProvider] Post created successfully on Buffer. Update ID: ${data.updates[0].id}`);
-    return data.updates[0].id;
-  }
+  console.log(`[BufferProvider] Sending post to Buffer channel ${resolvedId} via GraphQL...`);
+  const postData = await fetchGraphQL(activeKey, createPostMutation, { input });
   
-  console.log(`[BufferProvider] Post created successfully on Buffer. Response ID: ${data.id || "unknown"}`);
-  return data.id || "buffer-update";
+  if (postData.createPost?.message) {
+    throw new Error(`Buffer GraphQL Error: ${postData.createPost.message}`);
+  }
+
+  const postId = postData.createPost?.post?.id;
+  if (!postId) {
+    throw new Error(`Buffer GraphQL returned invalid response: ${JSON.stringify(postData)}`);
+  }
+
+  console.log(`[BufferProvider] Post created successfully on Buffer via GraphQL. ID: ${postId}`);
+  return postId;
 }
