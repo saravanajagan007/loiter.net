@@ -96,13 +96,14 @@ export function SourcesList({ sources }: { sources: Source[] }) {
             <TableHead>Value</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Last Polled</TableHead>
+            <TableHead>On-Demand Pull</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {paginatedSources.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground h-28 bg-muted/10 rounded-b-xl border-dashed">
+              <TableCell colSpan={7} className="text-center text-muted-foreground h-28 bg-muted/10 rounded-b-xl border-dashed">
                 No sources added yet.
               </TableCell>
             </TableRow>
@@ -146,22 +147,25 @@ export function SourcesList({ sources }: { sources: Source[] }) {
                   <TableCell className="text-xs text-muted-foreground">
                     {source.lastPolledAt ? new Date(source.lastPolledAt).toLocaleString() : "Never"}
                   </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isPending || !source.isActive}
+                      onClick={() => handlePullNow(source.id)}
+                      className="flex items-center gap-1.5 h-8 font-semibold text-xs border-primary/20 text-primary hover:bg-primary/5 hover:text-primary cursor-pointer transition-colors"
+                      title="Pull content now"
+                    >
+                      {isPulling ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      )}
+                      <span>Pull Now</span>
+                    </Button>
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        disabled={isPending || !source.isActive}
-                        onClick={() => handlePullNow(source.id)}
-                        className="hover:bg-primary/10 hover:text-primary cursor-pointer h-8 w-8 text-muted-foreground"
-                        title="Pull content now"
-                      >
-                        {isPulling ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-4 w-4" />
-                        )}
-                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
