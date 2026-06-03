@@ -121,17 +121,33 @@ export async function publishViaBuffer(
   const activeKey = await getRotatedBufferKey(accessToken);
   console.log(`[BufferProvider] Using rotated API key starting with: ${activeKey.substring(0, 8)}`);
 
+  // Extract inline media URLs from content
+  let cleanedContent = content;
+  const extractedUrls: string[] = [];
+  const mediaRegex = /(https?:\/\/pbs\.twimg\.com\/[^\s]+|https?:\/\/[^\s]+\/pic\/[^\s]+|https?:\/\/[^\s]+?\.(?:png|jpg|jpeg|gif|webp|mp4)(?:\?[^\s]*)?)/gi;
+  const matches = content.match(mediaRegex);
+  
+  if (matches) {
+    for (const match of matches) {
+      extractedUrls.push(match);
+      cleanedContent = cleanedContent.split(match).join("");
+    }
+    cleanedContent = cleanedContent.replace(/\s+/g, " ").trim();
+  }
+
+  const allMediaUrls = Array.from(new Set([...(mediaUrls || []), ...extractedUrls]));
+
   const url = "https://api.bufferapp.com/1/updates/create.json";
 
   const body: any = {
-    text: content,
+    text: cleanedContent,
     profile_ids: [profileId],
     now: true,
     shorten: false,
   };
 
-  if (mediaUrls && mediaUrls.length > 0) {
-    let mediaUrl = mediaUrls[0];
+  if (allMediaUrls.length > 0) {
+    let mediaUrl = allMediaUrls[0];
     const picIndex = mediaUrl.indexOf("/pic/");
     if (picIndex !== -1) {
       const pathPart = mediaUrl.substring(picIndex + 5);
