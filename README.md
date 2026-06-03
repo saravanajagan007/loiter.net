@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Loiter.net - Deployment & Setup Guide
 
-## Getting Started
+Loiter.net is a social media curation and automated publishing platform. It leverages self-hosted Nitter and RSS-Bridge instances to fetch content, process it, and queue/verify published posts using background workers (BullMQ) and Redis.
 
-First, run the development server:
+## System Prerequisites
+* **Node.js**: v18.x or v20.x
+* **MySQL Database**: A running instance (local or remote)
+* **Docker & Docker Compose**: For self-hosting the Nitter scraper, RSS-Bridge, and cache container
+* **Process Manager (Optional but recommended)**: PM2 to manage workers and Next.js processes in production
 
+---
+
+## Setup & Deployment Steps (VPS / Production)
+
+### Step 1: Clone and Install Dependencies
+Clone the repository and install the Node modules:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/saravanajagan007/loiter.net.git
+cd loiter.net
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Step 2: Configure Environment Variables
+Create a `.env` file in the project root by copying `.env.example` or creating one manually:
+```env
+# Database connection (MySQL)
+DATABASE_URL="mysql://username:password@ip_or_host:3306/database_name"
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+# Redis Server connection (used for queue workers)
+REDIS_URL="redis://127.0.0.1:6380"
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# NextAuth authentication config
+AUTH_SECRET="your_nextauth_secret_key"
+AUTH_TRUST_HOST=true
+NEXTAUTH_URL="http://your-domain.com" # Or http://localhost:3000 for local development
 
-## Learn More
+# Scraper Configuration
+CONTENT_FETCH_INTERVAL_MINUTES=60
+NITTER_INSTANCE_URL="http://localhost:8080"
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Step 3: Configure Scraping Sessions
+Because Twitter/X requires authentication to scrape public profiles, you must configure a Twitter account session for Nitter:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Create a JSON Lines session file at `nitter/sessions.jsonl`.
+2. Extract the `auth_token` and `ct0` cookies from a logged-in Twitter account.
+3. Save them in `nitter/sessions.jsonl` using the following exact format:
+   ```json
+   {"kind": "cookie", "username": "your_account_username", "id": "12345678", "auth_token": "YOUR_AUTH_TOKEN", "ct0": "YOUR_CT0_COOKIE"}
+   ```
+   *(Note: The `"kind": "cookie"` and a unique numeric `"id"` are required fields for the Nitter parser).*
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Step 4: Run Scraper Infrastructure
+Start the scraper services (Redis, Nitter, and RSS-Bridge) via Docker Compose:
+```bash
+docker-compose up -d --build
+```
+Verify the scraping infrastructure is working:
+* Nitter dashboard is accessible at `http://localhost:8080`
+* RSS-Bridge is accessible at `http://localhost:3002`
 
-## Deploy on Vercel
+### Step 5: Database Setup
+Apply database changes and generate the Prisma Client:
+```bash
+npx prisma db push
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Step 6: Start Application Processes
+For production deployments, it is recommended to run processes using a process manager like **PM2** so that they restart automatically on crash or reboot.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+#### A. Install PM2 Globally (if not already installed)
+```bash
+npm install -g pm2
+```
+
+#### B. Start Next.js App
+First, build the production bundle:
+```bash
+npm run build
+```
+Start the application process:
+```bash
+pm2 start npm --name "loiter-web" -- start
+```
+
+#### C. Start Background Workers
+Start the queue processor workers (used for fetching feeds, AI generation fallbacks, and publishing verifications):
+```bash
+pm2 start npm --name "loiter-workers" -- run workers
+```
+
+#### D. Monitor Running Processes
+Check status and logs of your PM2 processes:
+```bash
+pm2 list
+pm2 logs
+```
+
+---
+
+## Local Development Flow
+If running locally for testing:
+1. Ensure your local Docker Desktop is running and start services: `docker-compose up -d`.
+2. Run database setup: `npx prisma db push`.
+3. In separate terminals, run:
+   * Web client: `npm run dev`
+   * Background workers: `npm run workers`
