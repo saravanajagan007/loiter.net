@@ -35,6 +35,24 @@ export const postVerifierWorker = new Worker(
     for (const queuedPost of verifyingPosts) {
       try {
         console.log(`[Verifier Worker] Verifying post ${queuedPost.id}...`);
+
+        // Check if the post has been in VERIFYING state for more than 1 hour
+        const now = new Date();
+        const updatedAtTime = new Date(queuedPost.updatedAt).getTime();
+        const timeElapsedMs = now.getTime() - updatedAtTime;
+        const oneHourMs = 60 * 60 * 1000;
+
+        if (timeElapsedMs > oneHourMs) {
+          console.log(`[Verifier Worker] Post ${queuedPost.id} has exceeded the 1 hour verification window. Marking as FAILED.`);
+          await db.queuedPost.update({
+            where: { id: queuedPost.id },
+            data: {
+              status: QueueStatus.FAILED,
+              errorMessage: "Verification timed out. The post was not found on your profile within 1 hour."
+            }
+          });
+          continue;
+        }
         
         // Find X social account to fetch user timeline
         const account = queuedPost.workspace.socialAccounts.find(
@@ -62,9 +80,9 @@ export const postVerifierWorker = new Worker(
 
         const provider = getSocialProvider(queuedPost.platform);
         
-        // Fetch recent posts from the user's timeline (e.g. limit to 10)
+        // Fetch recent posts from the user's timeline (e.g. limit to 50)
         console.log(`[Verifier Worker] Fetching timeline for user @${handle}...`);
-        const recentPosts = await provider.fetchUserPosts(token, handle, 10);
+        const recentPosts = await provider.fetchUserPosts(token, handle, 50);
         
         const draftContent = queuedPost.generatedPost.generatedContent;
         let isPublished = false;
