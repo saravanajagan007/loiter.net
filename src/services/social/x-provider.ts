@@ -159,17 +159,22 @@ export class XProvider implements SocialProvider {
             max_results: Math.min(limit || 10, 100),
             "tweet.fields": ["created_at", "text"],
             "media.fields": ["url", "preview_image_url"],
-            expansions: ["attachments.media_keys"]
+            expansions: ["attachments.media_keys"],
+            exclude: ["replies", "retweets"]
           });
 
           const posts: SocialPost[] = [];
           for (const tweet of timeline.data.data || []) {
-            if (!isEnglishOrTamil(tweet.text)) {
+            const text = tweet.text || "";
+            if (text.startsWith("RT @") || text.trim().startsWith("@")) {
+              continue;
+            }
+            if (!isEnglishOrTamil(text)) {
               continue;
             }
             posts.push({
               externalId: tweet.id,
-              content: tweet.text,
+              content: text,
               authorHandle: cleanHandle,
               postedAt: tweet.created_at ? new Date(tweet.created_at) : new Date(),
               mediaUrls: []
@@ -284,6 +289,11 @@ export class XProvider implements SocialProvider {
             .replace(/&quot;/g, '"')
             .replace(/&#39;/g, "'");
 
+          // Skip replies that start with a mention
+          if (content.trim().startsWith("@")) {
+            continue;
+          }
+
           // Filter only English and Tamil content
           if (!isEnglishOrTamil(content)) {
             continue;
@@ -319,7 +329,8 @@ export class XProvider implements SocialProvider {
       try {
         console.log(`[XProvider] Searching hashtag "${hashtag}" using official X API...`);
         const client = new TwitterApi(accessToken);
-        const searchResults = await client.v2.search(hashtag, {
+        const query = `${hashtag} -is:reply -is:retweet`;
+        const searchResults = await client.v2.search(query, {
           max_results: Math.min(limit || 10, 100),
           "tweet.fields": ["created_at", "text", "author_id"],
           expansions: ["author_id"]
@@ -330,7 +341,11 @@ export class XProvider implements SocialProvider {
           : new Map();
         
         for (const tweet of searchResults.data.data || []) {
-          if (!isEnglishOrTamil(tweet.text)) {
+          const text = tweet.text || "";
+          if (text.startsWith("RT @") || text.trim().startsWith("@")) {
+            continue;
+          }
+          if (!isEnglishOrTamil(text)) {
             continue;
           }
           posts.push({
@@ -442,6 +457,11 @@ export class XProvider implements SocialProvider {
             .replace(/&gt;/g, ">")
             .replace(/&quot;/g, '"')
             .replace(/&#39;/g, "'");
+
+          // Skip replies that start with a mention
+          if (content.trim().startsWith("@")) {
+            continue;
+          }
 
           // Filter only English and Tamil content
           if (!isEnglishOrTamil(content)) {
