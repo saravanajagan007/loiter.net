@@ -16,9 +16,9 @@ Follow these steps to configure your dummy/secondary accounts:
 1. Open `nitter/sessions.jsonl`.
 2. Add your account tokens in JSON Lines format (one JSON object per line):
    ```json
-   {"username": "your_account_username", "password": "your_account_password", "auth_token": "PASTE_AUTH_TOKEN_HERE", "ct0": "PASTE_CT0_COOKIE_HERE"}
+   {"kind": "cookie", "username": "your_account_username", "id": "12345678", "auth_token": "PASTE_AUTH_TOKEN_HERE", "ct0": "PASTE_CT0_COOKIE_HERE"}
    ```
-3. You can add multiple accounts (one per line) to allow Nitter to rotate and distribute the scraping requests.
+3. You can add multiple accounts (one per line) to allow Nitter to rotate and distribute the scraping requests. Note that `"kind": "cookie"` and a unique numeric `"id"` string are required by Nitter's session parser to prevent container start failures.
 
 ### 3. Spin up Containers
 Run the following command from the project root to start Nitter and RSS-Bridge:
