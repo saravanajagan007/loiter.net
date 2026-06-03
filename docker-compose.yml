@@ -33,9 +33,33 @@ services:
     networks:
       - srv_default
 
+  nitter:
+    image: zedeus/nitter:latest
+    container_name: loiter-nitter
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nitter/nitter.conf:/src/nitter.conf:ro
+      - ./nitter/sessions.jsonl:/src/sessions.jsonl:ro
+    depends_on:
+      - redis
+    networks:
+      - srv_default
+
+  rss-bridge:
+    image: rssbridge/rss-bridge:latest
+    container_name: loiter-rss-bridge
+    restart: always
+    ports:
+      - "3002:80"
+    networks:
+      - srv_default
+
 networks:
   srv_default:
     external: true
 
 volumes:
   loiter_redis_data:
+
