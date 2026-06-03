@@ -62,10 +62,10 @@ export const contentFetcherWorker = new Worker(
         referenceTime = lastFetchedPost.postedAt;
         console.log(`[ContentFetcher] Source "${source.value}": Last post reference found at ${referenceTime.toISOString()}`);
       } else {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        referenceTime = today;
-        console.log(`[ContentFetcher] Source "${source.value}": No reference found. Using current day start ${referenceTime.toISOString()}`);
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        referenceTime = sevenDaysAgo;
+        console.log(`[ContentFetcher] Source "${source.value}": No reference found. Using 7 days ago start ${referenceTime.toISOString()}`);
       }
 
       const newPosts = posts.filter(
