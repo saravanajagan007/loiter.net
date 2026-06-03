@@ -27,7 +27,9 @@ export async function GET(req: NextRequest) {
 
   try {
     const xProvider = new XProvider();
-    const tokens = await xProvider.exchangeCode(code, codeVerifier);
+    const redirectUri = new URL(req.nextUrl.pathname, req.nextUrl.origin).toString();
+    console.log("[X Callback] Exchanging code using redirectUri:", redirectUri);
+    const tokens = await xProvider.exchangeCode(code, codeVerifier, redirectUri);
 
     await db.socialAccount.upsert({
       where: {

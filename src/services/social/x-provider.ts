@@ -51,10 +51,10 @@ export class XProvider implements SocialProvider {
 
   constructor() {}
 
-  async getAuthUrl(state: string): Promise<{ url: string; codeVerifier: string }> {
+  async getAuthUrl(state: string, callbackUrlOverride?: string): Promise<{ url: string; codeVerifier: string }> {
     const clientId = await getSystemSetting("X_CLIENT_ID");
     const clientSecret = await getSystemSetting("X_CLIENT_SECRET");
-    const callbackUrl = await getSystemSetting("X_CALLBACK_URL");
+    const callbackUrl = callbackUrlOverride || await getSystemSetting("X_CALLBACK_URL");
 
     const client = new TwitterApi({
       clientId,
@@ -70,10 +70,10 @@ export class XProvider implements SocialProvider {
     );
   }
 
-  async exchangeCode(code: string, codeVerifier: string) {
+  async exchangeCode(code: string, codeVerifier: string, redirectUriOverride?: string) {
     const clientId = await getSystemSetting("X_CLIENT_ID");
     const clientSecret = await getSystemSetting("X_CLIENT_SECRET");
-    const callbackUrl = await getSystemSetting("X_CALLBACK_URL");
+    const callbackUrl = redirectUriOverride || await getSystemSetting("X_CALLBACK_URL");
 
     const client = new TwitterApi({
       clientId,

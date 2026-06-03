@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { XProvider } from "@/services/social/x-provider";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 export async function connectX() {
   console.log("[connectX] Server action started.");
@@ -12,10 +12,17 @@ export async function connectX() {
   console.log("[connectX] Session resolved:", !!session, "workspaceId:", session?.user?.workspaceId);
   if (!session?.user.workspaceId) throw new Error("Unauthorized");
 
+  // Dynamically determine redirect URL based on request headers (localhost or loiter.net)
+  const headersList = await headers();
+  const host = headersList.get("host") || "localhost:3000";
+  const protocol = host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https";
+  const dynamicCallbackUrl = `${protocol}://${host}/api/social/callback/x`;
+  console.log("[connectX] Dynamic Callback URL configured:", dynamicCallbackUrl);
+
   const xProvider = new XProvider();
   const state = Math.random().toString(36).substring(7);
   console.log("[connectX] Generating auth link for state:", state);
-  const { url, codeVerifier } = await xProvider.getAuthUrl(state);
+  const { url, codeVerifier } = await xProvider.getAuthUrl(state, dynamicCallbackUrl);
   console.log("[connectX] Generated redirect URL:", url);
 
   const isProd = process.env.NODE_ENV === "production";
