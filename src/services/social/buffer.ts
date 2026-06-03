@@ -4,9 +4,10 @@ import redis from "@/lib/redis";
  * Checks if a key can be used under the rate limits:
  * - Max 100 calls in the last 15 minutes (900 seconds)
  * - Max 500 calls in the last 24 hours (86400 seconds)
+ * - Max 10000 calls in the last 30 days (2,592,000 seconds)
  * If yes, logs the current call in Redis and returns true. Otherwise, returns false.
  */
-async function acquireApiKey(apiKey: string): Promise<boolean> {
+export async function acquireApiKey(apiKey: string): Promise<boolean> {
   const now = Date.now();
   const redisKey = `buffer:rate_limit:${apiKey}`;
   
@@ -14,15 +15,20 @@ async function acquireApiKey(apiKey: string): Promise<boolean> {
   const fifteenMinsAgo = now - 15 * 60 * 1000;
   // 24 hours window = 24 * 60 * 60 * 1000 = 86,400,000 ms
   const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+  // 30 days window = 30 * 24 * 60 * 60 * 1000 = 2,592,000,000 ms
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
 
   try {
     const pipeline = redis.pipeline();
     
-    // Remove timestamps older than 24 hours
-    pipeline.zremrangebyscore(redisKey, 0, twentyFourHoursAgo);
+    // Remove timestamps older than 30 days
+    pipeline.zremrangebyscore(redisKey, 0, thirtyDaysAgo);
     
-    // Count total calls in the last 24 hours
+    // Count total calls in the last 30 days
     pipeline.zcard(redisKey);
+    
+    // Count calls in the last 24 hours
+    pipeline.zcount(redisKey, twentyFourHoursAgo, "+inf");
     
     // Count calls in the last 15 minutes
     pipeline.zcount(redisKey, fifteenMinsAgo, "+inf");
@@ -30,23 +36,30 @@ async function acquireApiKey(apiKey: string): Promise<boolean> {
     const results = await pipeline.exec();
     if (!results) return false;
 
-    const card24h = results[1][1] as number;
-    const count15m = results[2][1] as number;
+    const card30d = results[1][1] as number;
+    const count24h = results[2][1] as number;
+    const count15m = results[3][1] as number;
 
     if (count15m >= 100) {
       console.warn(`[Buffer Rate Limiter] Key starting with ${apiKey.substring(0, 8)} hit 15-minute rate limit (${count15m}/100 calls)`);
       return false;
     }
 
-    if (card24h >= 500) {
-      console.warn(`[Buffer Rate Limiter] Key starting with ${apiKey.substring(0, 8)} hit 24-hour rate limit (${card24h}/500 calls)`);
+    if (count24h >= 500) {
+      console.warn(`[Buffer Rate Limiter] Key starting with ${apiKey.substring(0, 8)} hit 24-hour rate limit (${count24h}/500 calls)`);
+      return false;
+    }
+
+    if (card30d >= 10000) {
+      console.warn(`[Buffer Rate Limiter] Key starting with ${apiKey.substring(0, 8)} hit 30-day rate limit (${card30d}/10000 calls)`);
       return false;
     }
 
     // Key is available! Record the call.
     const addPipeline = redis.pipeline();
     addPipeline.zadd(redisKey, now, String(now));
-    addPipeline.expire(redisKey, 24 * 60 * 60);
+    // Set TTL to 30 days (in seconds)
+    addPipeline.expire(redisKey, 30 * 24 * 60 * 60);
     await addPipeline.exec();
 
     return true;
@@ -60,7 +73,7 @@ async function acquireApiKey(apiKey: string): Promise<boolean> {
 /**
  * Rotates the keys using a round-robin index in Redis and returns the first available key.
  */
-async function getRotatedBufferKey(bufferToken: string): Promise<string> {
+export async function getRotatedBufferKey(bufferToken: string): Promise<string> {
   const keys = bufferToken.split(/[\s,;\n\r]+/).map(k => k.trim()).filter(k => k.length > 0);
   if (keys.length === 0) throw new Error("No Buffer API keys provided");
   if (keys.length === 1) {
